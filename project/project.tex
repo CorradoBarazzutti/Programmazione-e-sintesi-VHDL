@@ -1,0 +1,54 @@
+\chapter{Implementazione}
+
+La descrizione in linguaggio VHDL del componente è comportamentale e si avvale di un processo che garantisce la sequenzialità dell'esecuzione.
+
+Per programmare il componente è stato adottato un approccio top-down che si rispecchia nella struttura di questo capitolo. In primo luogo è definita la struttura di controllo principale e in seguito le procedure che realizzano le funzionalità necessarie.
+
+\section{Struttura di controllo}
+La struttura di controllo garantisce la corretta evoluzione della rete, che può essere quindi vista come una macchina a stati, insieme alla sincronizzazione con i segnali di $reset$, $start$ e $clock$. Questo si implementa inserendo i segnali nella sensitivity list del processo, quindi con una strutura if-then-else. Il processo attende in primo luogo che il segnale START in ingresso verrà portato a
+1 per un ciclo di clock. In seguito a questo evento il modulo non registrà ne un nuovo segnale di start 
+ne uno di $reset$ fino alla fine della elaborazione. 
+Al termine della eleborazione e una volta scritto il risultato in memoria, il modulo porta a 1 il segnale di DONE  per 1 ciclo di clock. \\
+
+L'elaborazione va immaginata come divisa in tre fasi: iniziaizazzione, induzione e scrittura dei risultati. Come suggerito da \cite{brandolese} nel capitolo sulle macchine a stati l'evoluzione è controllata da una struttura if-then-else. La condizione di evoluzione della macchina è data da un contatore: la prima fase dura 3 cicli di clock, cioé il tempo di leggere l'intestazione, la fase di induzione dura $ROWS \times COLS$ cicli di clock, la scrittura dei risultati 2 cicli.\\
+
+\section{Inizializzazione}
+\label{inizializzazione}
+La fase di inizializzazione consiste nella lettura in memoria dell'intestazione che contiene la taglia dell'immagine (ROWS e COLS) e il colore soglia che definisce il limite della figura di interesse (TRIG).
+Grazie a queste informazioni sono quindi inizializzati, al loro valore pessimo, i parametri di ottimizzazione. Il limite sinistro è inizializzato al bordo destro, cioè al numero di colonne dell'immagine mentre il limite destro è inizializzato a zero. In modo analogo sono inizializzato $bottom$ e $top$. 
+
+\section{Ricerca della soluzione}
+\label{induzione}
+Il calcolo dell’area che circoscrive la figura di interesse si riconduce a trovare il valore della variabili $left$, $reight$, $bottom$, $top$, cioè i limiti sinistro, destro dell'immagine espressi come indici di riga e i limiti superiore e inferiore come indici di colonna. \\
+
+Tale ricerca consiste in un processo di ottimizzazione sull'immagine in memoria. Per ottimizzazione si intende quella delle variabili left, reight, bottom, top seconda la condizione trattata nella sezione \ref{update}.
+Notare che lo spazio di ricerca è di taglia limitata $2^8 \times 2^8$ e può quindi essere esplorato con un ciclo $for$ dove l'estremo è definito da una constante. Nella nostro impementaione il ciclo è realizzato con il contatore sopracitato. Il contatore a 9 bit puo contare fino a 512 ma è resettato a 3 nella fase di inizializzazione, a $ROWS \times COLS$ in induzione e a 2 in scrittura dei risultati\\
+
+Passiamo ora a descrive nel dettagli le funzionalità.
+
+
+
+\subsection{Aggiornamento}
+\label{update}
+Ad ogni cella di interesse, tale che il colore sia più scuro di quello dichiarato nell'intestazione i valori $bottom$ e $right$ sono aggiornati se più grandi dell'indirizzo di riga e di colonna della cella rispettivamente. I valori $top$ e $left$ sono invece aggiornati se inferiori alle coordinate della cella in questione.
+
+\section {Altre utilità}
+
+\subsection{Lettura e scrittura della memoria}
+Le operazione di lettura vengo effettuate ponendo il segnale $o \textunderscore adress$ al valore binario dell'indirizzo cui si desidera accedere e il segnale di $enable$ della memoria a 1. Quindi si attende che sia trascorso mezzo ciclo di clock (un fronte di salita seguito da uno di discesa). Trascorso questo tempo, se il segnale $o \textunderscore adress$ e $enable$ sono tenuti stabili, si ha la garanzia che la memoria abbia posto il segnale $i \textunderscore data$ al valore all'indirizzo di memoria indicato. Infine si pone l'enable a zero e si può leggere il segnale $i \textunderscore data$.\\
+Nello stesso modo si procede per la scrittura, avendo l'accortezza di indicare in $o \textunderscore data$ il segnale da scrivere e abilitando $o \textunderscore we$. \\
+L'attesa di mezzo ciclo di clock per ogni accesso in memoria fa che questa operazione sia la più costosa in termini di tempo. Considerado, come è stato fatto nel testbench, un periodo di clock di $30 ns$ possiamo stimare il tempo di esecuzione nel peggior caso pari $T \dot 2^9 = 15 \mu s$ 
+
+\subsection{calcolo dell'area}
+Il risultato è semplicemente calcolato secondo la formula \ref{compute_area} avvalendosi della funzione $mult$ definita in sezione \ref{mult}.
+\begin{equation}
+	mult((UNSIGNED(right) - UNSIGNED(left)),  (UNSIGNED(bottom) - UNSIGNED(top)))
+    \label{compute_area}
+\end{equation}
+Eventualmente può verificasi che non vi sia nessuna figura di interesse. In questa circostanza $UNSIGNED(right) < UNSIGNED(left)$ e $UNSIGNED(bottom) < UNSIGNED(top)$ perché i parametri non sono mai stati aggiornati. Il circuito rileva questa condizione e invece di effettuare la moltiplicazione ritorno correttamente che l'area è zero.
+
+\subsection{Moltiplicazione}
+\label{mult}
+Per semplicità la moltiplicazione è calcolata ricastando i parametri da standard ulogic vector in interi e utilizzando l'operatore $*$. Evidentemente si potrebbe senza difficoltà ottimizzare questo aspetto implementando una moltiplicazione tra standard logic vector a 8 bit. Tale raffinamento è lasciato come possibile miglioria al sistema. 
+
+
